@@ -1,6 +1,6 @@
 {
   "name": "xml-card-reader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Biblioteca NPM para leitura e parse de XML com TypeScript",
   "keywords": [
     "xml",
