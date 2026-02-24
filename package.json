@@ -2,18 +2,47 @@
   "name": "xml-card-reader",
   "version": "1.0.0",
   "description": "Biblioteca NPM para leitura e parse de XML com TypeScript",
+  "keywords": [
+    "xml",
+    "emv",
+    "apdu",
+    "parser",
+    "card"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaique-kira/xml-card-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kaique-kira/xml-card-reader/issues"
+  },
+  "homepage": "https://github.com/kaique-kira/xml-card-reader#readme",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "check": "npm run build && npm test",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:postman": "tsx scripts/postman-server.ts",
-    "parse:file": "tsx scripts/parse-xml-cli.ts --file ./samples/*.xml",
+    "parse:file": "tsx scripts/parse-xml-cli.ts --file",
     "parse:stdin": "tsx scripts/parse-xml-cli.ts",
+    "pack:dry": "npm pack --dry-run",
+    "release:check": "npm run check && npm run pack:dry",
     "prepublishOnly": "npm run build && npm run test"
   },
   "author": "Kaique-Felipe",
