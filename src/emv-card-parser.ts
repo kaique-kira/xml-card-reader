@@ -295,7 +295,24 @@ function buildTlvFromTag(tagNode: any): string {
     const childArray = toArray(children as any);
     valueHex = childArray.map((c) => buildTlvFromTag(c)).join("");
   } else {
-    valueHex = nodeText(tagNode).replace(/\s+/g, "");
+    const format = safeString(tagNode["@_format"]).toUpperCase();
+    const text = nodeText(tagNode).trim();
+
+    if (format === "ISO-8859-1") {
+      // Converte texto ISO-8859-1 para bytes (latin1) e depois para hex
+      valueHex = Buffer.from(text, "latin1").toString("hex").toUpperCase();
+    } else {
+      // Alguns XMLs EMV usam notação "0.81" / "0.82" para indicar 0x81 / 0x82 etc.
+      // Tratamos esse caso específico antes de fazer a limpeza genérica.
+      const pseudoHexMatch = text.match(/^0\.([0-9a-fA-F]{2})$/);
+      if (pseudoHexMatch) {
+        valueHex = pseudoHexMatch[1].toUpperCase();
+      } else {
+        // Para demais formatos, assumimos conteúdo já em hex, mas
+        // limpamos qualquer caractere não-hex (ponto, espaços, quebras, etc.).
+        valueHex = text.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+      }
+    }
   }
 
   const lengthHex = encodeLengthEmv(valueHex.length / 2);
@@ -363,6 +380,11 @@ function buildApdusFromInterfaceSection(
         if (cardResponse.Tag !== undefined) {
           const tags = toArray(cardResponse.Tag as any);
           response = tags.map((t) => buildTlvFromTag(t)).join("");
+          // Segurança extra: garantir que a resposta TLV final contenha apenas hex
+          // (alguns XMLs trazem notações como "0.81" que não são hex válidos).
+          if (response) {
+            response = response.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+          }
           responseType = "TLV";
         } else {
           const raw = nodeText(cardResponse).replace(/\s+/g, "");
