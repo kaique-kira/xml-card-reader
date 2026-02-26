@@ -15,7 +15,7 @@ export interface CardApduLike {
   name?: string | null;
   command: string;
   expr?: string | null;
-  responseType?: "TLV" | "RAW" | null;
+  responseType?: null;
   response?: string | null;
   sw: string;
 }
