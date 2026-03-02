@@ -283,6 +283,7 @@ function encodeLengthEmv(length: number): string {
 function buildTlvFromTag(tagNode: any): string {
   if (!tagNode) return "";
 
+  const text = nodeText(tagNode).trim();
   const idRaw = tagNode["@_ID"];
   if (!idRaw) return "";
 
@@ -366,10 +367,20 @@ function buildApdusFromInterfaceSection(
       if (cmdData) exprParts.push(`cmdData='${cmdData}'`);
 
       const expr = exprParts.length ? exprParts.join(" and ") : null;
+      let behaviorType:
+        | "STATIC"
+        | "EMV_GENERATE_AC"
+        | "EMV_INTERNAL_AUTHENTICATE";
 
+      if (ins === "AE") {
+        behaviorType = "EMV_GENERATE_AC";
+      } else if (ins === "88") {
+        behaviorType = "EMV_INTERNAL_AUTHENTICATE";
+      } else {
+        behaviorType = "STATIC";
+      }
       const cardResponse = req.CardResponse as any;
       let response: string | null = null;
-      let responseType: "TLV" | "RAW" | null = null;
       let sw = "9000";
 
       if (cardResponse) {
@@ -385,12 +396,10 @@ function buildApdusFromInterfaceSection(
           if (response) {
             response = response.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
           }
-          responseType = "TLV";
         } else {
           const raw = nodeText(cardResponse).replace(/\s+/g, "");
           if (raw) {
             response = raw.toUpperCase();
-            responseType = "RAW";
           }
         }
       }
@@ -400,7 +409,7 @@ function buildApdusFromInterfaceSection(
         command,
         expr,
         response,
-        responseType,
+        responseType: behaviorType,
         sw,
       });
     }

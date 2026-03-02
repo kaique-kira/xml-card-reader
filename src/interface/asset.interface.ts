@@ -15,7 +15,9 @@ export interface CardApduLike {
   name?: string | null;
   command: string;
   expr?: string | null;
-  responseType?: null;
+
+  responseType: "STATIC" | "EMV_INTERNAL_AUTHENTICATE" | "EMV_GENERATE_AC";
+
   response?: string | null;
   sw: string;
 }
