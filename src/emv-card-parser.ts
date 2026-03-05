@@ -280,6 +280,26 @@ function encodeLengthEmv(length: number): string {
   return firstByte + lenBytes;
 }
 
+function hasEmvcardPlaceholder(text: string): boolean {
+  return /\[emvcard\.[^\]]+\]/i.test(text);
+}
+
+function normalizeHexLikeText(text: string): string {
+  const trimmed = text.trim();
+  const pseudoHexMatch = trimmed.match(/^0\.([0-9a-fA-F]{2})$/);
+
+  let value = pseudoHexMatch
+    ? pseudoHexMatch[1]
+    : trimmed.replace(/[^0-9a-fA-F]/g, "");
+
+  // Se o parser converteu "01" para number 1, recupera para "01".
+  if (value.length % 2 !== 0) {
+    value = `0${value}`;
+  }
+
+  return value.toUpperCase();
+}
+
 function buildTlvFromTag(tagNode: any): string {
   if (!tagNode) return "";
 
@@ -289,34 +309,31 @@ function buildTlvFromTag(tagNode: any): string {
   const id = safeString(idRaw).replace(/\s+/g, "").toUpperCase();
 
   const children = tagNode.Tag;
-  let valueHex = "";
+  let value = "";
 
   if (children !== undefined) {
     const childArray = toArray(children as any);
-    valueHex = childArray.map((c) => buildTlvFromTag(c)).join("");
+    value = childArray.map((c) => buildTlvFromTag(c)).join("");
   } else {
     const format = safeString(tagNode["@_format"]).toUpperCase();
-    const text = nodeText(tagNode).trim();
+    const text = nodeText(tagNode);
 
     if (format === "ISO-8859-1") {
       // Converte texto ISO-8859-1 para bytes (latin1) e depois para hex
-      valueHex = Buffer.from(text, "latin1").toString("hex").toUpperCase();
+      value = Buffer.from(text, "latin1").toString("hex").toUpperCase();
+    } else if (hasEmvcardPlaceholder(text)) {
+      // Para placeholders dinâmicos emvcard, preserva exatamente como veio.
+      value = text;
     } else {
-      // Alguns XMLs EMV usam notação "0.81" / "0.82" para indicar 0x81 / 0x82 etc.
-      // Tratamos esse caso específico antes de fazer a limpeza genérica.
-      const pseudoHexMatch = text.match(/^0\.([0-9a-fA-F]{2})$/);
-      if (pseudoHexMatch) {
-        valueHex = pseudoHexMatch[1].toUpperCase();
-      } else {
-        // Para demais formatos, assumimos conteúdo já em hex, mas
-        // limpamos qualquer caractere não-hex (ponto, espaços, quebras, etc.).
-        valueHex = text.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
-      }
+      value = normalizeHexLikeText(text);
     }
   }
 
-  const lengthHex = encodeLengthEmv(valueHex.length / 2);
-  return id + lengthHex + valueHex.toUpperCase();
+  const isPureHex = /^[0-9A-F]*$/.test(value);
+  const length = isPureHex ? value.length / 2 : Buffer.byteLength(value, "latin1");
+  const lengthHex = encodeLengthEmv(length);
+
+  return id + lengthHex + value;
 }
 
 function buildApdusFromInterfaceSection(
@@ -336,40 +353,22 @@ function buildApdusFromInterfaceSection(
       const name = safeString(req["@_name"]) || null;
       const cmd = safeString(req["@_cmd"]);
       const ins = safeString(req["@_ins"]);
-      const p1Attr = safeString(req["@_p1"]) || "00";
-      const p2Attr = safeString(req["@_p2"]) || "00";
-      const cmdData = safeString(req["@_cmdData"]);
+      const p1Attr = safeString(req["@_p1"]) ;
+      const p2Attr = safeString(req["@_p2"]);
 
       let command: string;
       if (name === "ReadRecord") {
-        const sfi = safeString(req["@_sfi"]) || "01";
-        const record = safeString(req["@_record"]) || "01";
+        const sfi = safeString(req["@_sfi"]);
+        const record = safeString(req["@_record"]);
         command = buildReadRecordCommand(sfi, record);
       } else {
         command = `${cmd}${ins}${p1Attr}${p2Attr}`.toUpperCase();
       }
-
-      const exprParts: string[] = [];
-      exprParts.push(`interface='${interfaceType}'`);
-      if (aid) exprParts.push(`aid='${aid}'`);
-      if (name) exprParts.push(`name='${name}'`);
-
-      const sfiAttr = safeString(req["@_sfi"]);
-      if (sfiAttr) exprParts.push(`sfi='${sfiAttr}'`);
-
-      const recordAttr = safeString(req["@_record"]);
-      if (recordAttr) exprParts.push(`record='${recordAttr}'`);
-
-      const instanceAttr = safeString(req["@_instance"]);
-      if (instanceAttr) exprParts.push(`instance='${instanceAttr}'`);
-
-      if (cmdData) exprParts.push(`cmdData='${cmdData}'`);
-
-      const expr = exprParts.length ? exprParts.join(" and ") : null;
+      const expr = null;
 
       const cardResponse = req.CardResponse as any;
       let response: string | null = null;
-      let responseType: "TLV" | "RAW" | null = null;
+      const responseType = null;
       let sw = "9000";
 
       if (cardResponse) {
@@ -380,17 +379,10 @@ function buildApdusFromInterfaceSection(
         if (cardResponse.Tag !== undefined) {
           const tags = toArray(cardResponse.Tag as any);
           response = tags.map((t) => buildTlvFromTag(t)).join("");
-          // Segurança extra: garantir que a resposta TLV final contenha apenas hex
-          // (alguns XMLs trazem notações como "0.81" que não são hex válidos).
-          if (response) {
-            response = response.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
-          }
-          responseType = "TLV";
         } else {
           const raw = nodeText(cardResponse).replace(/\s+/g, "");
           if (raw) {
             response = raw.toUpperCase();
-            responseType = "RAW";
           }
         }
       }

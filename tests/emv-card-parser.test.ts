@@ -50,8 +50,40 @@ describe("emv-card-parser - ISO-8859-1", () => {
 
     for (const apdu of asset.apdus) {
       if (!apdu.response) continue;
+
+      if (/\[emvcard\./i.test(apdu.response)) {
+        // Placeholder dinâmico deve ser preservado sem sanitização.
+        continue;
+      }
+
       expect(apdu.response).not.toContain(".");
       expect(/^[0-9A-F]+$/.test(apdu.response)).toBe(true);
+    }
+  });
+
+  it("preserva placeholders emvcard sem tratamento", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const xml = await readFile("samples/AEIPS 03 EP 03.xml", "utf-8");
+
+    const asset = parseEmvCardXml(xml);
+    const withEmvcard = asset.apdus.find((apdu) =>
+      /\[emvcard\./i.test(apdu.response ?? ""),
+    );
+
+    expect(withEmvcard).toBeDefined();
+    expect(withEmvcard!.response).toContain("[emvcard.");
+    expect(withEmvcard!.response).toMatch(/\[emvcard\.[^\]]+\]/i);
+  });
+
+  it("retorna expr e responseType vazios (null) na saida geral", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const xml = await readFile("samples/AEIPS 03 EP 03.xml", "utf-8");
+
+    const asset = parseEmvCardXml(xml);
+
+    for (const apdu of asset.apdus) {
+      expect(apdu.expr ?? null).toBeNull();
+      expect(apdu.responseType ?? null).toBeNull();
     }
   });
 });
