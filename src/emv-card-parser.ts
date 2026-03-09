@@ -355,15 +355,16 @@ function buildApdusFromInterfaceSection(
       const ins = safeString(req["@_ins"]);
       const p1Attr = safeString(req["@_p1"]) ;
       const p2Attr = safeString(req["@_p2"]);
+      const cmdDataAttr = safeString(req["@_cmdData"]);
 
       let command: string;
       if (name === "ReadRecord") {
-        const sfi = safeString(req["@_sfi"]);
+  const sfi = safeString(req["@_sfi"]);
         const record = safeString(req["@_record"]);
-        command = buildReadRecordCommand(sfi, record);
-      } else {
-        command = `${cmd}${ins}${p1Attr}${p2Attr}`.toUpperCase();
-      }
+        command = buildReadRecordCommand(sfi, record) 
+
+      } else {            command = buildGenericApduCommand(cmd, ins, p1Attr, p2Attr, cmdDataAttr);
+       }
       const expr = null;
 
       const cardResponse = req.CardResponse as any;
@@ -399,6 +400,83 @@ function buildApdusFromInterfaceSection(
   }
 
   return apdus;
+}
+
+function normalizeApduByte(value: string, fallback = "00"): string {
+  const normalized = value.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+  if (!normalized) return fallback;
+  return normalized.padStart(2, "0").slice(-2);
+}
+
+function bitsNibbleToHex(bits4: string): string {
+  if (/^[01]{4}$/.test(bits4)) {
+    return parseInt(bits4, 2).toString(16).toUpperCase();
+  }
+
+  if (/^[01?]{4}$/.test(bits4)) {
+    return "?";
+  }
+
+  return "";
+}
+
+function bitsToPseudoHex(bits: string): string {
+  const compact = bits.replace(/\s+/g, "");
+  if (!compact || compact.length % 8 !== 0) {
+    return "";
+  }
+
+  let out = "";
+  for (let offset = 0; offset < compact.length; offset += 8) {
+    const byteBits = compact.slice(offset, offset + 8);
+    const high = bitsNibbleToHex(byteBits.slice(0, 4));
+    const low = bitsNibbleToHex(byteBits.slice(4, 8));
+    if (!high || !low) {
+      return "";
+    }
+    out += high + low;
+  }
+
+  return out;
+}
+
+function normalizeCmdData(cmdData: string): string {
+  const quotedBitsAsHex = cmdData.replace(/'([^']+)'/g, (_full, bits: string) => {
+    const converted = bitsToPseudoHex(bits);
+    return converted || bits;
+  });
+
+  let normalized = quotedBitsAsHex
+    .replace(/[\s']/g, "")
+    .replace(/[^0-9a-fA-F?]/g, "")
+    .toUpperCase();
+
+  if (normalized.length % 2 !== 0) {
+    normalized = `0${normalized}`;
+  }
+
+  return normalized;
+}
+
+function buildGenericApduCommand(
+  cmd: string,
+  ins: string,
+  p1: string,
+  p2: string,
+  cmdData: string,
+): string {
+  const claHex = normalizeApduByte(cmd);
+  const insHex = normalizeApduByte(ins);
+  const p1Hex = normalizeApduByte(p1);
+  const p2Hex = normalizeApduByte(p2);
+
+  const data = normalizeCmdData(cmdData);
+  if (!data) {
+    return `${claHex}${insHex}${p1Hex}${p2Hex}`;
+  }
+
+  const lc = encodeLengthEmv(data.length / 2);
+  return `${claHex}${insHex}${p1Hex}${p2Hex}${lc}${data}`;
 }
 
 function buildReadRecordCommand(sfiHex: string, recordHex: string): string {

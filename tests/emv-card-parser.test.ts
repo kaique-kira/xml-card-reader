@@ -4,6 +4,50 @@ import { parseEmvCardXml } from "../index";
 // Teste focado em garantir que tags com format="ISO-8859-1"
 // sejam convertidas para hex antes do cálculo de length na TLV.
 describe("emv-card-parser - ISO-8859-1", () => {
+  it("monta comando APDU incluindo Lc e cmdData", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<EMVCoL3CardImage formatVersion="1.0">
+  <Header>
+    <CardId>TEST CARD</CardId>
+    <CardVersion>v1</CardVersion>
+  </Header>
+  <Contact>
+    <Application AID="A000000000">
+      <TerminalRequest name="GPO" cmd="80" ins="A8" p1="00" p2="00" cmdData="83 00">
+        <CardResponse sw="9000" />
+      </TerminalRequest>
+    </Application>
+  </Contact>
+</EMVCoL3CardImage>`;
+
+    const asset = parseEmvCardXml(xml);
+
+    expect(asset.apdus.length).toBe(1);
+    expect(asset.apdus[0].command).toBe("80A80000028300");
+  });
+
+  it("converte cmdData em bits (entre aspas) para pseudo-hex", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<EMVCoL3CardImage formatVersion="1.0">
+  <Header>
+    <CardId>TEST CARD</CardId>
+    <CardVersion>v1</CardVersion>
+  </Header>
+  <Contact>
+    <Application AID="A000000000">
+      <TerminalRequest name="Custom" cmd="80" ins="A8" p1="00" p2="00" cmdData="'00000100'">
+        <CardResponse sw="9000" />
+      </TerminalRequest>
+    </Application>
+  </Contact>
+</EMVCoL3CardImage>`;
+
+    const asset = parseEmvCardXml(xml);
+
+    expect(asset.apdus.length).toBe(1);
+    expect(asset.apdus[0].command).toBe("80A800000104");
+  });
+
   it("converte texto ISO-8859-1 para hex na TLV", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <EMVCoL3CardImage formatVersion="1.0">
